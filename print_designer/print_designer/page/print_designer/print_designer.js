@@ -80,11 +80,10 @@ const printDesignerDialog = () => {
 						doc_type: doctype,
 						print_designer: 1,
 					})
-					.then((doc) => {
+					.then(async(doc) => {
 						// Incase Route is Same, set_route() is needed to refresh.
-						set_current_doc(doc.name).then(() => {
-							frappe.set_route("print-designer", doc.name);
-						})
+						await set_current_doc(doc.name)
+						frappe.set_route("print-designer", doc.name)
 					})
 					.finally(() => {
 						d.get_primary_btn().prop("disabled", false);

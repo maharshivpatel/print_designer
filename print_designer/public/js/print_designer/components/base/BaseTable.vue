@@ -18,6 +18,7 @@
 					<tr v-if="columns.length">
 						<th
 							:style="[
+								'cursor: pointer;',
 								column.width && {
 									width: `${column.width}%`,
 									maxWidth: `${column.width}%`,
@@ -40,6 +41,17 @@
 								}
 							"
 						>
+						<div
+							class="drag-handle"
+							draggable="false"
+						>
+							<IconsUse
+								name="es-line-drag"
+								key="es-line-drag"
+								:size="44"
+								:padding="14"
+							/>
+							</div>
 							<span :class="{ emptyColumnHead: !Boolean(column.label.length) }">{{
 								column?.label
 							}}</span>
@@ -112,6 +124,7 @@ import { useDraw } from "../../composables/Draw";
 import BaseResizeHandles from "./BaseResizeHandles.vue";
 import AppTableContextMenu from "../layout/AppTableContextMenu.vue";
 import BaseTableTd from "./BaseTableTd.vue";
+import IconsUse from "../../icons/IconsUse.vue"
 import { onClickOutside } from "@vueuse/core";
 const MainStore = useMainStore();
 const props = defineProps({
@@ -345,6 +358,14 @@ const handleMouseUp = (e, tablewidth) => {
 	}
 	th {
 		position: relative;
+	}
+	.drag-handle {
+		display: none;
+		position: absolute;
+		top: -16px;
+		transform: rotate(90deg);
+		cursor: move;
+		user-select: none;
 	}
 	.resizer {
 		position: absolute;
