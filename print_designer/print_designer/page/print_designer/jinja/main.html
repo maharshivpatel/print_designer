@@ -209,6 +209,20 @@ background-image: url('{{frappe.get_url()}}{%if element.isDynamic %}{{element.im
             rel="stylesheet"
         />
     {%endif%}
+    <style>
+        @media print {
+            *,
+            *:before,
+            *:after {
+              color: unset;
+              background: unset;
+            }
+            .print-format p {
+                margin-left: unset;
+                margin-right: unset;
+            }
+          }
+    </style>
     <div id="__print_designer">
         <div id="header-html">
             <div style="position: relative; top:0px; left: 0px; width: 100%; height:{{ settings.page.headerHeightWithMargin }}px;">{% if headerElement %}{{ renderHeader }}{%endif%}</div>

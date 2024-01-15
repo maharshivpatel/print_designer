@@ -402,6 +402,7 @@ export const useElementStore = defineStore("ElementStore", {
 			const childrensLoad = (element, parent) => {
 				element.parent = parent;
 				element.DOMRef = null;
+				delete element.printX;
 				delete element.printY;
 				element.isDraggable = true;
 				element.isResizable = true;
@@ -486,6 +487,7 @@ export const useElementStore = defineStore("ElementStore", {
 			this.Elements.map((element) => {
 				element.DOMRef = null;
 				element.parent = this.Elements;
+				delete element.printX;
 				delete element.printY;
 				element.isDraggable = true;
 				element.isResizable = true;
