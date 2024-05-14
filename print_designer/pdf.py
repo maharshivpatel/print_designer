@@ -3,9 +3,11 @@ import html
 import json
 
 import frappe
+from frappe import _
 from frappe.monitor import add_data_to_monitor
 from frappe.utils.error import log_error
 from frappe.utils.jinja_globals import is_rtl
+from frappe.utils.pdf import _guess_template_error_line_number
 from frappe.utils.pdf import pdf_body_html as fw_pdf_body_html
 
 
@@ -78,11 +80,13 @@ def pdf_body_html(print_format, jenv, args, template):
 			return template.render(args, filters={"len": len})
 
 		except Exception as e:
-			error = log_error(title=e, reference_doctype="Print Format", reference_name=print_format.name)
-			if frappe.conf.developer_mode:
-				return f"<h1><b>Something went wrong while rendering the print format.</b> <hr/> If you don't know what just happened, and wish to file a ticket or issue on Github <hr /> Please copy the error from <code>Error Log {error.name}</code> or ask Administrator.<hr /><h3>Error rendering print format: {error.reference_name}</h3><h4>{error.method}</h4><pre>{html.escape(error.error)}</pre>"
-			else:
-				return f"<h1><b>Something went wrong while rendering the print format.</b> <hr/> If you don't know what just happened, and wish to file a ticket or issue on Github <hr /> Please copy the error from <code>Error Log {error.name}</code> or ask Administrator.</h1>"
+			frappe.throw(
+				_("Error in print format on line {0}: {1}").format(
+					_guess_template_error_line_number(template), e
+				),
+				exc=frappe.PrintFormatError,
+				title=_("Print Format Error"),
+			)
 	return fw_pdf_body_html(template, args)
 
 
