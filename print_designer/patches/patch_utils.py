@@ -108,6 +108,7 @@ def patch_formats(
 	)
 	if update_print_json:
 		for pf in print_formats:
+			pf_doc = frappe.get_doc("Print Format", pf[0])
 			# print_designer_print_format was introduced in schema version 1.1.0 so running this on older version is not required
 			if not is_older_schema(settings=frappe.json.loads(pf[6] or "{}"), current_version="1.1.0"):
 				print_json = frappe.json.loads(pf[5] or "{}")
@@ -118,7 +119,9 @@ def patch_formats(
 				if print_json.get("footer", None):
 					print_json["footer"] = patch_elements(print_json["footer"], callbacks, types)
 
-		updated_doc = frappe.get_doc("Print Format", pf[0]).update(
+				pf_doc.update({"print_designer_print_format": frappe.json.dumps(print_json)})
+
+		pf_doc.update(
 			{
 				"print_designer_header": frappe.json.dumps(
 					patch_elements(frappe.json.loads(pf[1] or "[]"), callbacks, types)
@@ -132,11 +135,10 @@ def patch_formats(
 				"print_designer_footer": frappe.json.dumps(
 					patch_elements(frappe.json.loads(pf[4] or "[]"), callbacks, types)
 				),
-				"print_designer_print_format": frappe.json.dumps(print_json),
 			}
 		)
 		if save:
-			updated_doc.save(ignore_permissions=True, ignore_version=False)
+			pf_doc.save(ignore_permissions=True, ignore_version=False)
 
 
 def patch_elements(
