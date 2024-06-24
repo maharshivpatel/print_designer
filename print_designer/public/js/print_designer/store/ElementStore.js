@@ -93,16 +93,20 @@ export const useElementStore = defineStore("ElementStore", {
 				};
 			}
 			// WARNING: lines below are for debugging purpose only.
-			// this.Elements.length = 0;
-			// this.Headers.length = 0;
-			// this.Footers.length = 0;
-			// this.Headers.push(...header);
-			// this.Elements.push(...body);
-			// this.Footers.push(...footer);
-			// this.Elements.forEach((page, index) => {
-			// 	page.header = [createHeaderFooterElement(this.getHeaderObject(index).childrens, "header")];
-			// 	page.footer = [createHeaderFooterElement(this.getFooterObject(index).childrens, "footer")]
-			// });
+			this.Elements.length = 0;
+			this.Headers.length = 0;
+			this.Footers.length = 0;
+			this.Headers.push(...header);
+			this.Elements.push(...body);
+			this.Footers.push(...footer);
+			this.Elements.forEach((page, index) => {
+				page.header = [
+					createHeaderFooterElement(this.getHeaderObject(index).childrens, "header"),
+				];
+				page.footer = [
+					createHeaderFooterElement(this.getFooterObject(index).childrens, "footer"),
+				];
+			});
 			// End of debugging code
 			objectToSave.print_designer_print_format = JSON.stringify(layout);
 
@@ -257,10 +261,13 @@ export const useElementStore = defineStore("ElementStore", {
 			objectToSave.print_designer_settings = JSON.stringify(settingsForSave);
 			objectToSave.print_designer_after_table = null;
 			objectToSave.css = css;
+			if (MainStore.isRawPrintEnable && !MainStore.rawCmdLang) {
+				frappe.throw("Please Select Raw Command Language");
+			}
 			if (MainStore.isOlderSchema("1.3.0")) {
 				await this.printFormatCopyOnOlderSchema(objectToSave);
 			} else {
-				await frappe.db.set_value("Print Format", MainStore.printDesignName, objectToSave);
+				// await frappe.db.set_value("Print Format", MainStore.printDesignName, objectToSave);
 				frappe.show_alert(
 					{
 						message: `Print Format Saved Successfully`,
@@ -467,6 +474,7 @@ export const useElementStore = defineStore("ElementStore", {
 				if (el.type == "rectangle") {
 					el.childrens = this.computeRowLayout(el.childrens, el);
 					el.layoutType = "column";
+					el.IsUserGeneratedRect = true;
 					el.classes.push("relative-column");
 					el.rectangleContainer = true;
 					if (el.childrens.some((e) => e.heightType == "auto-min-height")) {
@@ -489,22 +497,20 @@ export const useElementStore = defineStore("ElementStore", {
 					header: "<b>" + __("in header") + "</b>",
 					footer: "<b>" + __("in footer") + "</b>",
 					auto: __("in table, auto layout failed"),
-
-					});
-					changelayout = (changelayout == undefined)? true:false
-					if (changelayout) {
-						MainStore.mode = "pdfSetup";
-						message += messageType[type];
-					}
-					frappe.show_alert(
-						{
-							message: message,
-							indicator: "red",
-					});
-					throw new Error(message);
-			}
+				});
+				changelayout = changelayout == undefined ? true : false;
+				if (changelayout) {
+					MainStore.mode = "pdfSetup";
+					message += messageType[type];
+				}
+				frappe.show_alert({
+					message: message,
+					indicator: "red",
+				});
+				throw new Error(message);
+			};
 			const tableElement = this.Elements.filter((el) => el.type == "table");
-			if(this.isParentElementOverlapping(elements)){
+			if (this.isParentElementOverlapping(elements)) {
 				throwOverlappingError("element", false);
 			}
 			if (tableElement.length == 1 && MainStore.isHeaderFooterAuto) {
@@ -535,42 +541,47 @@ export const useElementStore = defineStore("ElementStore", {
 				});
 			}
 		},
-		isParentElementOverlapping(elements){
-			for(let index in elements){
-				let nextIndex = parseInt(index) + 1
-				let currEle = elements[index]
-				let firstEleObj = {}
-				let otherEleObj = {}
-				
-				for (let otherEleIndex in elements){
-					otherEleIndex = parseInt(otherEleIndex)
-					if( otherEleIndex < nextIndex) { continue; }
+		isParentElementOverlapping(elements) {
+			for (let index in elements) {
+				let nextIndex = parseInt(index) + 1;
+				let currEle = elements[index];
+				let firstEleObj = {};
+				let otherEleObj = {};
+
+				for (let otherEleIndex in elements) {
+					otherEleIndex = parseInt(otherEleIndex);
+					if (otherEleIndex < nextIndex) {
+						continue;
+					}
 					let otherEle = elements[otherEleIndex];
-					if (currEle.startY > otherEle.startY){
+					if (currEle.startY > otherEle.startY) {
 						firstEleObj = {
-							'startY': otherEle.startY,
-							'endY': otherEle.startY + otherEle.height,
-						}
-					
+							startY: otherEle.startY,
+							endY: otherEle.startY + otherEle.height,
+						};
+
 						otherEleObj = {
-							'startY': currEle.startY,
-						}
+							startY: currEle.startY,
+						};
 					} else {
 						firstEleObj = {
-							'startY': currEle.startY,
-							'endY': currEle.startY + currEle.height,
-						}
-					
+							startY: currEle.startY,
+							endY: currEle.startY + currEle.height,
+						};
+
 						otherEleObj = {
-							'startY': otherEle.startY,
-						}
+							startY: otherEle.startY,
+						};
 					}
-					if ( otherEleObj.startY >= firstEleObj.startY && otherEleObj.startY <= firstEleObj.endY ){
-						return true
-					}	
+					if (
+						otherEleObj.startY >= firstEleObj.startY &&
+						otherEleObj.startY <= firstEleObj.endY
+					) {
+						return true;
+					}
 				}
 			}
-			return false
+			return false;
 		},
 		autoCalculateHeaderFooter(tableEl) {
 			const MainStore = useMainStore();

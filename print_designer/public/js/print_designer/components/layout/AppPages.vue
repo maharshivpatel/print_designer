@@ -14,7 +14,11 @@
 				}
 			"
 		>
-			<template v-for="(object, index) in page.header" :key="object.id" v-if="page.DOMRef">
+			<template
+				v-for="(object, index) in page.header"
+				:key="object.id"
+				v-if="page.DOMRef && !MainStore.isRawPrintEnable"
+			>
 				<component
 					:is="
 						object.type == 'text'
@@ -38,7 +42,11 @@
 					v-bind="{ object, index }"
 				></component>
 			</template>
-			<template v-for="(object, index) in page.footer" :key="object.id" v-if="page.DOMRef">
+			<template
+				v-for="(object, index) in page.footer"
+				:key="object.id"
+				v-if="page.DOMRef && !MainStore.isRawPrintEnable"
+			>
 				<component
 					:is="
 						object.type == 'text'

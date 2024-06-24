@@ -1,15 +1,16 @@
+import base64
 import hashlib
 import html
 import json
 
 import frappe
+from frappe.model.document import Document
 from frappe.monitor import add_data_to_monitor
 from frappe.utils.error import log_error
 from frappe.utils.jinja_globals import is_rtl
 from frappe.utils.pdf import pdf_body_html as fw_pdf_body_html
 from frappe.www.printview import get_print_format_doc, validate_print_permission
-from frappe.model.document import Document
-import base64
+
 
 def pdf_header_footer_html(soup, head, content, styles, html_id, css):
 	if soup.find(id="__print_designer"):
@@ -121,29 +122,27 @@ def get_print_format_template(jenv, print_format):
 				jenv, "print_designer/page/print_designer/jinja/print_format.html"
 			)[0]
 
+
 @frappe.whitelist()
-def get_raw_cmd_render_pd(doc: str, name: str | None = None, print_format: str | None = None):
-	
-	if isinstance(name, str):
-		document = frappe.get_doc(doc, name)
-	else:
-		document = frappe.get_doc(json.loads(doc))
+def render_raw_print(doctype: str, name: str, print_format: str | None = None):
+
+	document = frappe.get_doc(doctype, name)
 	document.check_permission()
 	print_format = get_print_format_doc(print_format, meta=document.meta)
-	
-	return get_rendered_template_pd(doc=document, print_format=print_format)
+
+	return _render_raw_print(doc=document, print_format=print_format)
 
 
-def get_rendered_template_pd(
+def _render_raw_print(
 	doc: "Document",
 	print_format: str | None = None,
 ):
-	
+
 	print_settings = frappe.get_single("Print Settings").as_dict()
-	
+
 	if not frappe.flags.ignore_print_permissions:
 		validate_print_permission(doc)
-	
+
 	element_List = json.loads(print_format.print_designer_print_format)
 	doc.run_method("before_print", print_settings)
 
@@ -152,105 +151,127 @@ def get_rendered_template_pd(
 	settings = json.loads(print_format.print_designer_settings)
 	args.update(
 		{
-			"settings": settings,
 			"doc": doc,
+			"settings": settings,
 		}
 	)
-	template_source = jenv.loader.get_source( 				
-		jenv, "print_designer/page/print_designer/jinja/render_element.html" 
-		)[0]
-	args.update({"afterTableElement": json.loads(print_format.print_designer_after_table or "[]")})
+	template_source = jenv.loader.get_source(
+		jenv, "print_designer/page/print_designer/jinja/render_element.html"
+	)[0]
+
 	template = jenv.from_string(template_source)
 	html_with_raw_cmd_list = []
 	options = {
-				"language": 'ESCPOS',
-				"x": settings.get('page').get('marginTop'),
-				"y": settings.get('page').get('marginLeft'),
-				"dotDensity": "double",
-				"pageWidth": settings.get('page').get('width'),
-			}
-	
-	raw_cmd_lang = settings.get('page').get('rawCmdLang')
+		"language": "ESCPOS",
+		"x": settings.get("page").get("marginTop"),
+		"y": settings.get("page").get("marginLeft"),
+		"dotDensity": "double",
+		"pageWidth": settings.get("page").get("width"),
+	}
+
+	raw_cmd_lang = settings.get("page").get("rawCmdLang")
 	if raw_cmd_lang is None:
-		return {'status' : False, 'msg' : 'Language is not selected from Print Designer'}
-	
-	for set_type in element_List:
-		for element in element_List[set_type]:
-			try :
-				if type(element) != dict:
-					element_obj = element_List.get(set_type).get(element)
-					if element_obj is None or  len(element_obj) == 0 :
-						continue
-				# rawCmdBeforeEle = element.get('childrens')[0].get('childrens')[0].get('rawCmdBeforeEle', ' ').strip()
-				# rawCmdAfterEle = element.get('childrens')[0].get('childrens')[0].get('rawCmdAfterEle', ' ').strip()
-				rawCmdBeforeEle, rawCmdAfterEle = get_raw_cmd(element.get('childrens'), raw_cmd_lang)	if element.get('childrens') is not None else ""
-				
-				args.update({"element": [element]})
-				#Need to change options value to raw_cmd
-				rendered_html = template.render(args, filters={"len": len})
-				html_with_raw_cmd_list.append({'type': 'raw', 'format': 'command', 'flavor': 'plain', 'data': rawCmdBeforeEle})
-				element_type = get_element_type(element.get("childrens"))
+		return {"status": False, "msg": "Language is not selected from Print Designer"}
 
-				if element_type == 'image':
-					file_path = element.get("childrens")[0].get("childrens")[0].get("childrens")[0].get("image").get('file_url')
-					file_path = f'{frappe.local.site}{file_path}'
-					base64_image = get_base64_encoded_image(file_path)
-					frappe.log_error("Base64 Encoded Image:", base64_image)
-					html_with_raw_cmd_list.append({ 'type': 'raw', 'format': 'image', 'flavor': 'file',  "data": "data:image/jpeg;base64," + base64_image, 'options': options })
-				else:		
-					html_with_raw_cmd_list.append({ 'type': 'raw', 'format': 'html', 'flavor': 'plain', 'data': rendered_html, 'options': options})
-				html_with_raw_cmd_list.append({'type': 'raw', 'format': 'command', 'flavor': 'plain', 'data': rawCmdAfterEle})
-			except Exception as e :
-				error = log_error(title=e, reference_doctype="Print Format", reference_name=print_format.name)
-				if frappe.conf.developer_mode:
-					return { 'status' : False, 'msg' : f"<h1><b>Something went wrong while rendering the print format.</b> <hr/> If you don't know what just happened, and wish to file a ticket or issue on Github <hr /> Please copy the error from <code>Error Log {error.name}</code> or ask Administrator.<hr /><h3>Error rendering print format: {error.reference_name}</h3><h4>{error.method}</h4><pre>{html.escape(error.error)}</pre>"}
-				else:
-					return { 'status' : False, 'msg' : f"<h1><b>Something went wrong while rendering the print format.</b> <hr/> If you don't know what just happened, and wish to file a ticket or issue on Github <hr /> Please copy the error from <code>Error Log {error.name}</code> or ask Administrator.</h1>"}
+	for element in element_List["body"]:
+		try:
 
-	return {'status' : True, 'raw_commands' : html_with_raw_cmd_list}
+			rawCmdBeforeEle, rawCmdAfterEle = (
+				get_raw_cmd(element.get("childrens"), raw_cmd_lang)
+				if element.get("childrens") is not None
+				else ""
+			)
+
+			args.update({"element": [element]})
+			if rawCmdBeforeEle:
+				html_with_raw_cmd_list.append(
+					{"type": "raw", "format": "command", "flavor": "plain", "data": rawCmdBeforeEle}
+				)
+			handle_image_element(element)
+			html_with_raw_cmd_list.append(
+				{
+					"type": "raw",
+					"format": "html",
+					"flavor": "plain",
+					"data": template.render(args, filters={"len": len}),
+					"options": options,
+				}
+			)
+			if rawCmdAfterEle:
+				html_with_raw_cmd_list.append(
+					{"type": "raw", "format": "command", "flavor": "plain", "data": rawCmdAfterEle}
+				)
+		except Exception as e:
+			error = log_error(title=e, reference_doctype="Print Format", reference_name=print_format.name)
+			if frappe.conf.developer_mode:
+				return {
+					"status": False,
+					"msg": f"<h1><b>Something went wrong while rendering the print format.</b> <hr/> If you don't know what just happened, and wish to file a ticket or issue on Github <hr /> Please copy the error from <code>Error Log {error.name}</code> or ask Administrator.<hr /><h3>Error rendering print format: {error.reference_name}</h3><h4>{error.method}</h4><pre>{html.escape(error.error)}</pre>",
+				}
+			else:
+				return {
+					"status": False,
+					"msg": f"<h1><b>Something went wrong while rendering the print format.</b> <hr/> If you don't know what just happened, and wish to file a ticket or issue on Github <hr /> Please copy the error from <code>Error Log {error.name}</code> or ask Administrator.</h1>",
+				}
+
+	return {"status": True, "raw_commands": html_with_raw_cmd_list}
+
+
+def handle_image_element(element):
+	if element.get("type") == "rectangle" and element.get("childrens").length:
+		for child in element.get("childrens"):
+			handle_image_element(child)
+	else:
+		if element.get("type") == "image":
+			element["file_url"] = get_base64_encoded_image(element.get("file_url"))
+
 
 def convert_str_raw_cmd(raw_string, printer_lang):
 	str_cmd_dict = {
-		'paper_cut' : {
-			'ESCPOS' : "\x1D\x56\x30",
+		"paper_cut": {
+			"ESCPOS": "\x1D\x56\x30",
 		},
-		'partial_paper_cut' : {
-			'ESCPOS' : "\x1D\x56\x01"
-		}
+		"partial_paper_cut": {"ESCPOS": "\x1D\x56\x01"},
 	}
 	return str_cmd_dict.get(raw_string).get(printer_lang) or ""
 
+
 def get_base64_encoded_image(file_path):
-    with open(file_path, "rb") as image_file:
-        encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
-        return encoded_string
+	with open(file_path, "rb") as image_file:
+		encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
+		return encoded_string
+
+
+# If element is alone basically nothing on the left or right side of it.
+# it will have 1 element and it will have raw commands.
+# You have to loop and render Row and columns and get the raw commands.
 
 
 def get_raw_cmd(element_dict, raw_cmd_lang):
 	for element in element_dict:
-		if element.get('childrens') is not None:
-			if element.get('layoutType') == "column" and 'index' in element:
-				rawCmdBeforeEle = element.get('rawCmdBeforeEle')
-				rawCmdAfterEle = element.get('rawCmdAfterEle')
+		if element.get("childrens") is not None:
+			if "layoutType" not in element or element.get("IsUserGeneratedRect", False):
+				rawCmdBeforeEle = element.get("rawCmdBeforeEle")
+				rawCmdAfterEle = element.get("rawCmdAfterEle")
 				if rawCmdBeforeEle == "custom":
-					rawCmdBeforeEle = element.get('customRawCmdBeforeEle')
+					rawCmdBeforeEle = element.get("customRawCmdBeforeEle")
 				elif rawCmdBeforeEle is not None:
 					rawCmdBeforeEle = convert_str_raw_cmd(rawCmdBeforeEle, raw_cmd_lang)
-				
+
 				if rawCmdAfterEle == "custom":
-					rawCmdAfterEle = element.get('customRawCmdAfterEle')
+					rawCmdAfterEle = element.get("customRawCmdAfterEle")
 				elif rawCmdAfterEle is not None:
 					rawCmdAfterEle = convert_str_raw_cmd(rawCmdBeforeEle, raw_cmd_lang)
-					
+
 				return rawCmdBeforeEle or "", rawCmdAfterEle or ""
-			
-			return get_raw_cmd(element.get('childrens'), raw_cmd_lang)
+
+			return get_raw_cmd(element.get("childrens"), raw_cmd_lang)
 		else:
 			return ""
 
+
 def get_element_type(element_dict):
 	for element in element_dict:
-		if  element.get("childrens"):
+		if element.get("childrens"):
 			return get_element_type(element.get("childrens"))
-		return element.get('type')
-
+		return element.get("type")
